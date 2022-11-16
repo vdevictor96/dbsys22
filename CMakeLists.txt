@@ -26,8 +26,8 @@ FetchContent_Populate(
 )
 
 if(APPLE)
-    set(MUTABLE_URL "https://bigdata.uni-saarland.de/teaching/dbsys20/mutable-macos-amd64.zip")
-    set(MUTABLE_MD5 "3b509ee7a65beb94e1f8a900437b3f01")
+    set(MUTABLE_URL "https://bigdata.uni-saarland.de/teaching/dbsys22/mutable-macos-amd64.zip")
+    set(MUTABLE_MD5 "dd26f5f0251cd19b3f31ed6486dd7062")
     set(LIBSUFFIX   "dylib")
 else()
     set(MUTABLE_URL "https://bigdata.uni-saarland.de/teaching/dbsys22/mutable-linux-amd64.zip")
