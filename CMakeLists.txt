@@ -49,9 +49,7 @@ ExternalProject_Add(
     INSTALL_COMMAND             ""
 )
 include_directories(SYSTEM "${PROJECT_BINARY_DIR}/mutable/src/Mutable/include")
-add_library(mutable STATIC IMPORTED)
-set_target_properties(mutable PROPERTIES IMPORTED_LOCATION "${PROJECT_BINARY_DIR}/mutable/src/Mutable/lib/libmutable.${LIBSUFFIX}")
-add_dependencies(mutable Mutable)
+link_directories("${PROJECT_BINARY_DIR}/mutable/src/Mutable/lib")
 
 include_directories(src)
 add_subdirectory(src)

@@ -10,9 +10,6 @@ if (CMAKE_BUILD_TYPE MATCHES Debug)
         .
     )
 
-    add_executable(
-        unittest
-        ${UNITTEST_SOURCES}
-    )
-    target_link_libraries(unittest $<TARGET_OBJECTS:dbsys22> mutable)
+    add_executable(unittest ${UNITTEST_SOURCES})
+    target_link_libraries(unittest PRIVATE $<TARGET_OBJECTS:dbsys22> mutable)
 endif()
