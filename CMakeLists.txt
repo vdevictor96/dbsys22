@@ -31,7 +31,7 @@ if(APPLE)
     set(LIBSUFFIX   "dylib")
 else()
     set(MUTABLE_URL "https://bigdata.uni-saarland.de/teaching/dbsys22/mutable-linux-amd64.zip")
-    set(MUTABLE_MD5 "b622a3f4fb3327e35b6baaf44263267e")
+    set(MUTABLE_MD5 "2929627ce5a9a4e068486cee85c8bcb4")
     set(LIBSUFFIX   "so")
 endif()
 ExternalProject_Add(
