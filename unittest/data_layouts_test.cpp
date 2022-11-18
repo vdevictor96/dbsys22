@@ -927,7 +927,7 @@ TEST_CASE("PAXLayout", "[milestone1]")
         auto &child_node = layout.child();
 
         /* Check that the child INode models a single row. */
-        CHECK(child_node.num_tuples() == 111);
+        CHECK((child_node.num_tuples() == 111 or child_node.num_tuples() == 112));
 
         /* Check that child node is an INode. */
         auto inode = cast<const DataLayout::INode>(&child_node);
@@ -935,15 +935,15 @@ TEST_CASE("PAXLayout", "[milestone1]")
 
         /* Validate the INode. */
         CHECK(inode->num_children() == 6);
-        CHECK(inode->at(0).offset_in_bits == 7104);
+        CHECK((inode->at(0).offset_in_bits == 7104 or inode->at(0).offset_in_bits == 7168));
         CHECK(inode->at(0).stride_in_bits == 32);
-        CHECK(inode->at(1).offset_in_bits >= 14208);
+        CHECK((inode->at(1).offset_in_bits == 14208 or inode->at(1).offset_in_bits == 14336));
         CHECK(inode->at(1).stride_in_bits == 160);
-        CHECK(inode->at(2).offset_in_bits >= 10656);
+        CHECK((inode->at(2).offset_in_bits == 10656 or inode->at(2).offset_in_bits == 10752));
         CHECK(inode->at(2).stride_in_bits == 32);
-        CHECK(inode->at(3).offset_in_bits >= 31968);
+        CHECK((inode->at(3).offset_in_bits == 31968 or inode->at(3).offset_in_bits == 32256));
         CHECK(inode->at(3).stride_in_bits == 1);
-        CHECK(inode->at(4).offset_in_bits >= 0);
+        CHECK(inode->at(4).offset_in_bits == 0);
         CHECK(inode->at(4).stride_in_bits == 64);
 
         /* Validate `id`. */
