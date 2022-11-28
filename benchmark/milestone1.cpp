@@ -10,7 +10,7 @@
 #ifndef NDEBUG
 constexpr int32_t NUM_TUPLES_RW = 5e5;
 #else
-constexpr int32_t NUM_TUPLES_RW = 2e7;
+constexpr int32_t NUM_TUPLES_RW = 5e6;
 #endif
 
 
