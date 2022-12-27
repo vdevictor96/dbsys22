@@ -7,7 +7,8 @@
 #include <cassert>
 #include <concepts>
 #include <cstdint>
-
+// TODO remove include? exchange fails
+#include <utility>
 
 /** Require that \tparam T is an *orderable* type, i.e. that two instances of \tparam T can be compared less than and
  * equals. */
@@ -62,15 +63,64 @@ struct BTree
     /** Computes the number of key-value pairs per `Leaf`, considering the specified `NodeSizeInBytes`. */
     static constexpr size_type compute_num_keys_per_leaf()
     {
-        /* TODO 1.2.1 */
-        return 0;
+        /* TODO 1.2.1 */       
+        // std::cout << "node size in bytes " << NODE_SIZE_IN_BYTES << std::endl;
+        // std::cout << "size key " << sizeof(key_type) << std::endl;
+        // std::cout << "align key " << alignof(key_type) << std::endl;
+        // Size taken by pointer to the next leaf
+        size_type metadata_size = sizeof(Leaf*);
+        // Size taken by flag indicating is leaf node or not
+        metadata_size += sizeof(bool);
+        // Size taken by size_type indicating the number of current keys in the leaf
+        metadata_size += sizeof(size_type);
+        // std::cout << "size ref_pair " << sizeof(ref_pair) << std::endl;
+        // TODO check which type is bigger, put them all together and then the other type
+        size_type offset = 0;
+        size_type key_align = alignof(key_type);
+        size_type mapped_align = alignof(mapped_type);
+        // add key
+        offset = offset + ((key_align - (offset % key_align)) % key_align);
+        offset += sizeof(key_type);
+        // add mapped
+        offset = offset + ((mapped_align - (offset % mapped_align)) % mapped_align);
+        offset += sizeof(mapped_type);
+
+        // value of offset for next key-value pair
+        size_type entry_size = offset + ((key_align - (offset % key_align)) % key_align);
+        // calculate num_key_value_pairs
+        size_type num_entries = (NODE_SIZE_IN_BYTES - metadata_size) / entry_size;
+        return num_entries;
+
     };
 
     /** Computes the number of keys per `INode`, considering the specified `NodeSizeInBytes`. */
     static constexpr size_type compute_num_keys_per_inode()
     {
         /* TODO 1.3.1 */
-        return 0;
+        // N*(pointer + key) + pointer = total
+        // Size taken by flag indicating is leaf node or not
+        size_type metadata_size = sizeof(bool);
+        // Size taken by size_type indicating the number of current keys in the node
+        metadata_size += sizeof(size_type);
+        
+        
+        // TODO order types in descending alignment size to save space?
+        // size_type offset = 0;
+        // size_type key_align = alignof(key_type);
+        // size_type mapped_align = alignof(mapped_type);
+        // // add key
+        // offset = offset + ((key_align - (offset % key_align)) % key_align);
+        // offset += sizeof(key_type);
+        // // add mapped
+        // offset = offset + ((mapped_align - (offset % mapped_align)) % mapped_align);
+        // offset += sizeof(mapped_type);
+        // // value of offset for next key-value pair
+        // size_type entry_size = offset + ((key_align - (offset % key_align)) % key_align);
+        size_type entry_size = sizeof(key_type) + sizeof(mapped_type);
+        // calculate num_key_value_pairs
+        size_type num_entries = NODE_SIZE_IN_BYTES / entry_size;
+        return num_entries;
+       
     };
 
     public:
@@ -83,8 +133,114 @@ struct BTree
     struct alignas(NODE_ALIGNMENT_IN_BYTES) Leaf
     {
         /* TODO 1.2.2 define fields */
+        using keys_type = std::array<key_type, NUM_KEYS_PER_LEAF>;
+        using values_type = std::array<mapped_type, NUM_KEYS_PER_LEAF>;
+        keys_type keys_;
+        values_type values_;
+        std::unique_ptr<Leaf> next_;
+        size_type n_keys_;
 
         /* TODO 1.2.3 define methods */
+        /*----- C'tors -----*/
+        public:
+        /* Empty C'tor */
+        Leaf() {}
+        /* C'tor */
+        Leaf(keys_type keys, values_type values)
+        : keys_(std::move(keys))
+        , values_(std::move(values))
+        { 
+            // keys_ = keys;
+            // values_ = values;
+        }
+
+        /*----- Getters -----*/
+        public:
+        const keys_type & keys() const { return keys_; }
+        values_type & values() { return values_; }
+        const values_type & values() const { return values_; }
+        bool has_next() const { return bool(next_); }
+        Leaf & next() { return *next_; }
+        const Leaf & next() const { return *next_; }
+        
+        const size_type & n_keys() const { return n_keys_;}
+        bool is_full() {
+            return NUM_KEYS_PER_LEAF <= n_keys();
+        }
+        bool is_empty() {
+            return 0 == n_keys();
+        }
+
+        /*----- Setters -----*/
+        private:
+        std::unique_ptr<Leaf> next(std::unique_ptr<Leaf> new_next)
+        { return std::exchange(next_, std::move(new_next)); }
+        
+        std::tuple<std::unique_ptr<Leaf>, key_type> split() {
+            size_type pivot_position = len(keys_) / 2;
+            key_type new_leaf_pivot = keys_[pivot_position];
+            // create the new leaf
+            keys_type new_keys;
+            values_type new_values;
+            std::copy(keys_.begin() + pivot_position, keys_.end() , new_keys.begin());
+            std::copy(values_.begin() + pivot_position, values_.end() , new_values.begin());
+            Leaf new_leaf = new Leaf(new_keys, new_values);
+            // update the old leaf, the rest of the keys are consider to not exist, although they still have value
+            n_keys_ = pivot_position;
+            next(new_leaf);
+            return std::make_tuple(new_leaf, new_leaf_pivot);
+        }
+        // merge()
+        
+        /* Public methods */
+        public:
+        std::tuple<std::unique_ptr<Leaf>, key_type> insert(key_type key, mapped_type value) {
+            if (is_full()) {
+                // split
+                std::tuple<std::unique_ptr<Leaf>, key_type> new_leaf_tuple = split();
+                std::unique_ptr<Leaf> new_leaf = new_leaf_tuple(0);
+                key_type new_leaf_pivot = new_leaf_tuple(1);
+                if (key < new_leaf_pivot) {
+                    // insert in this leaf
+                    insert(key, value);
+                    return nullptr;
+                } else {
+                    // insert in the new leaf
+                    new_leaf.insert(key, value);
+                    return new_leaf_tuple;
+                }
+            } else {
+                // base condition, inserts key in order
+                auto it = std::upper_bound(keys_.begin(), keys_.begin() + n_keys_, key);
+                keys_.insert(it, key);
+                int index = std::distance(keys_.begin(), it);
+                auto it_values = values_.begin() + index;
+                values_.insert(it_values, value);
+                n_keys_++;
+                return nullptr;
+            }
+        }
+
+        void remove(key_type key) {
+            // Find the index of the element to delete
+            int index = -1;
+            for (int i = 0; i < n_keys_; i++) {
+                if (keys_[i] == key) {
+                index = i;
+                break;
+                }
+            }
+            // If the element was found, shift all the elements after it one position to the left
+            if (index != -1) {
+                for (int i = index; i < n_keys_ - 1; i++) {
+                    keys_[i] = keys_[i + 1];
+                }
+                n_keys_--;
+            }
+            // TODO after deleting check if you have the minimum size of key-values and if not merge
+            // TODO do we need pointers for previous and next leaf? that is acyclic?
+        }
+        
     };
     static_assert(sizeof(Leaf) <= NODE_SIZE_IN_BYTES, "Leaf exceeds its size limit");
 
@@ -110,25 +266,32 @@ struct BTree
         using leaf_type = std::conditional_t<is_const, const Leaf, Leaf>;
 
         /* TODO 1.4.3 define fields */
+        // TODO get first leaf and transverse through its ref_pairs with the next operator
+        using pointer = ref_pair<key_type, value_type>*;
+        using reference = ref_pair<const key_type, value_type>;
+
+        private:
+        pointer key_value_;
 
         public:
-
         the_iterator(the_iterator<false> other)
         requires is_const
         {
             /* TODO 1.4.3 */
-            M_unreachable("not implemented");
+            key_value_ = other.key_value_;
         }
 
         bool operator==(the_iterator other) const {
             /* TODO 1.4.3 */
             M_unreachable("not implemented");
+            // return this->key_value_ == other.key_value_;
         }
         bool operator!=(the_iterator other) const { return not operator==(other); }
 
         the_iterator & operator++() {
             /* TODO 1.4.3 */
-            M_unreachable("not implemented");
+
+            // key_value_ = &key_value_->next(); return *this.;
         }
 
         the_iterator operator++(int) {
@@ -140,6 +303,7 @@ struct BTree
         ref_pair<const key_type, value_type> operator*() const {
             /* TODO 1.4.3 */
             M_unreachable("not implemented");
+            // return *key_value_;
         }
     };
 
@@ -180,6 +344,9 @@ struct BTree
         mapped_type(std::move(it->second));
     }
     {
+        // auto keys_per_leaf = compute_num_keys_per_leaf();
+        std::cout << "size " << BTree :: compute_num_keys_per_leaf () << std::endl;
+
         /* TODO 1.4.4 */
         M_unreachable("not implemented");
     }
@@ -196,11 +363,11 @@ struct BTree
     /** Returns an `iterator` to the smallest key-value pair of the tree, if any, and `end()` otherwise. */
     iterator begin() { /* TODO 1.4.3 */ M_unreachable("not implemented"); }
     /** Returns the past-the-end `iterator`. */
-    iterator end() { /* TODO 1.4.3 */ M_unreachable("not implemented"); }
+    iterator end() { /* TODO 1.4.3 */ M_unreachable("not implemented");  } // return iterator(nullptr); }
     /** Returns an `const_iterator` to the smallest key-value pair of the tree, if any, and `end()` otherwise. */
     const_iterator begin() const { /* TODO 1.4.3 */ M_unreachable("not implemented"); }
     /** Returns the past-the-end `iterator`. */
-    const_iterator end() const { /* TODO 1.4.3 */ M_unreachable("not implemented"); }
+    const_iterator end() const { /* TODO 1.4.3 */ M_unreachable("not implemented"); } //return const_iterator(nullptr); }
     /** Returns an `const_iterator` to the smallest key-value pair of the tree, if any, and `end()` otherwise. */
     const_iterator cbegin() const { return begin(); }
     /** Returns the past-the-end `iterator`. */
