@@ -67,8 +67,8 @@ struct BTree
         // std::cout << "node size in bytes " << NODE_SIZE_IN_BYTES << std::endl;
         // std::cout << "size key " << sizeof(key_type) << std::endl;
         // std::cout << "align key " << alignof(key_type) << std::endl;
-        // Size taken by pointer to the next leaf
-        size_type metadata_size = sizeof(Leaf*);
+        // Size taken by pointer to the previous and next leaf
+        size_type metadata_size = sizeof(Leaf*) * 2;
         // Size taken by flag indicating is leaf node or not
         metadata_size += sizeof(bool);
         // Size taken by size_type indicating the number of current keys in the leaf
@@ -102,24 +102,8 @@ struct BTree
         size_type metadata_size = sizeof(bool);
         // Size taken by size_type indicating the number of current keys in the node
         metadata_size += sizeof(size_type);
-        
-        
-        // TODO order types in descending alignment size to save space?
-        // size_type offset = 0;
-        // size_type key_align = alignof(key_type);
-        // size_type mapped_align = alignof(mapped_type);
-        // // add key
-        // offset = offset + ((key_align - (offset % key_align)) % key_align);
-        // offset += sizeof(key_type);
-        // // add mapped
-        // offset = offset + ((mapped_align - (offset % mapped_align)) % mapped_align);
-        // offset += sizeof(mapped_type);
-        // // value of offset for next key-value pair
-        // size_type entry_size = offset + ((key_align - (offset % key_align)) % key_align);
-        size_type entry_size = sizeof(key_type) + sizeof(mapped_type);
-        // calculate num_key_value_pairs
-        size_type num_entries = NODE_SIZE_IN_BYTES / entry_size;
-        return num_entries;
+       
+        return 0;
        
     };
 
@@ -137,8 +121,10 @@ struct BTree
         using values_type = std::array<mapped_type, NUM_KEYS_PER_LEAF>;
         keys_type keys_;
         values_type values_;
+        std::unique_ptr<Leaf> previous_;
         std::unique_ptr<Leaf> next_;
         size_type n_keys_;
+        // bool root_;
 
         /* TODO 1.2.3 define methods */
         /*----- C'tors -----*/
@@ -159,11 +145,17 @@ struct BTree
         const keys_type & keys() const { return keys_; }
         values_type & values() { return values_; }
         const values_type & values() const { return values_; }
+        bool has_previous() const { return bool(previous_); }
+        Leaf & previous() { return *previous_; }
+        const Leaf & previous() const { return *previous_; }
         bool has_next() const { return bool(next_); }
         Leaf & next() { return *next_; }
         const Leaf & next() const { return *next_; }
         
         const size_type & n_keys() const { return n_keys_;}
+        // bool is_root() {
+        //     return root_;
+        // }
         bool is_full() {
             return NUM_KEYS_PER_LEAF <= n_keys();
         }
@@ -175,6 +167,9 @@ struct BTree
         private:
         std::unique_ptr<Leaf> next(std::unique_ptr<Leaf> new_next)
         { return std::exchange(next_, std::move(new_next)); }
+
+        std::unique_ptr<Leaf> previous(std::unique_ptr<Leaf> new_previous)
+        { return std::exchange(previous_, std::move(new_previous)); }
         
         std::tuple<std::unique_ptr<Leaf>, key_type> split() {
             size_type pivot_position = len(keys_) / 2;
@@ -190,7 +185,6 @@ struct BTree
             next(new_leaf);
             return std::make_tuple(new_leaf, new_leaf_pivot);
         }
-        // merge()
         
         /* Public methods */
         public:
@@ -236,11 +230,60 @@ struct BTree
                     keys_[i] = keys_[i + 1];
                 }
                 n_keys_--;
+            } else {
+                return;
             }
             // TODO after deleting check if you have the minimum size of key-values and if not merge
             // TODO do we need pointers for previous and next leaf? that is acyclic?
+            size_type min_keys = NUM_KEYS_PER_LEAF / 2;
+            bool merged = false;
+            if (n_keys_ <= min_keys) {
+                // Merge with left sibling
+                if (has_previous()) {
+                    Leaf* previous = previous();
+                    size_type previous_keys = previous->n_keys();
+                    if (previous_keys + n_keys_ <= NUM_KEYS_PER_LEAF) {
+                        merged = true;
+                        // Append all keys and values from current leaf to previous
+                        for (int i = 0; i < n_keys_; i++) {
+                            previous->keys_[previous_keys + i] = keys_[i];
+                            previous->values_[previous_keys + i] = values_[i];
+                        }
+                        previous->n_keys_ += n_keys_;
+                        
+                        // Remove the current leaf node
+                        // TODO
+                        // deleteLeaf(*this);
+                        // return info to parent inner node
+                        // deleteKeyFromNode(parent, parent->keys[index]);
+                    } 
+                }
+                // As second option, merge with right sibling
+                if (has_next() && !merged)  {
+                    Leaf* next = next();
+                    size_type next_keys = next->n_keys();
+                    if (next_keys + n_keys_ <= NUM_KEYS_PER_LEAF) {
+                        merged = true;
+                        // Append all keys and values from next leaf to current
+                        for (int i = 0; i < next_keys; i++) {
+                            keys_[i + n_keys_] = next->keys_[i];
+                            values_[i + n_keys_] = next->values_[i];
+                        }
+                        n_keys_ += next->n_keys_;
+                       
+
+                        // Remove the right leaf node
+                        // TODO
+                        // deleteLeaf(next);
+                        // return info to parent inner node
+                        // deleteKeyFromNode(parent, parent->keys[index]);
+                    } 
+                }
+
+            }
         }
-        
+        // private:
+        // deleteLeaf()
     };
     static_assert(sizeof(Leaf) <= NODE_SIZE_IN_BYTES, "Leaf exceeds its size limit");
 
