@@ -9,6 +9,8 @@
 #include <cstdint>
 // TODO remove include? exchange fails
 #include <utility>
+#include <variant>
+
 
 /** Require that \tparam T is an *orderable* type, i.e. that two instances of \tparam T can be compared less than and
  * equals. */
@@ -283,6 +285,7 @@ struct BTree
             }
         }
         // private:
+        // TODO
         // deleteLeaf()
     };
     static_assert(sizeof(Leaf) <= NODE_SIZE_IN_BYTES, "Leaf exceeds its size limit");
@@ -309,32 +312,35 @@ struct BTree
         using leaf_type = std::conditional_t<is_const, const Leaf, Leaf>;
 
         /* TODO 1.4.3 define fields */
-        // TODO get first leaf and transverse through its ref_pairs with the next operator
-        using pointer = ref_pair<key_type, value_type>*;
-        using reference = ref_pair<const key_type, value_type>;
-
         private:
-        pointer key_value_;
+        using pointer = leaf_type*;
+        pointer leaf_;
+        size_type leaf_key_idx_;
 
         public:
         the_iterator(the_iterator<false> other)
         requires is_const
         {
             /* TODO 1.4.3 */
-            key_value_ = other.key_value_;
+            leaf_ = other.leaf_;
+            leaf_key_idx_ = other.leaf_key_idx_;
         }
+        the_iterator(pointer leaf, size_type leaf_key_idx = 0) : leaf_(leaf), leaf_key_idx_(leaf_key_idx) { }
 
         bool operator==(the_iterator other) const {
             /* TODO 1.4.3 */
-            M_unreachable("not implemented");
-            // return this->key_value_ == other.key_value_;
+            return leaf_ == other.leaf_ && leaf_key_idx_ == other.leaf_key_idx_;
         }
         bool operator!=(the_iterator other) const { return not operator==(other); }
 
         the_iterator & operator++() {
             /* TODO 1.4.3 */
-
-            // key_value_ = &key_value_->next(); return *this.;
+            leaf_key_idx_++;
+            if (leaf_key_idx_ > leaf_->n_keys()) {
+                leaf_key_idx_ = 0;
+                leaf_ = &leaf_->next(); 
+            }
+            return *this;
         }
 
         the_iterator operator++(int) {
@@ -345,8 +351,9 @@ struct BTree
 
         ref_pair<const key_type, value_type> operator*() const {
             /* TODO 1.4.3 */
-            M_unreachable("not implemented");
-            // return *key_value_;
+            key_type const key = leaf_->keys_[leaf_key_idx_];
+            value_type value = leaf_->values_[leaf_key_idx_];
+            return ref_pair(key, value);
         }
     };
 
@@ -376,6 +383,11 @@ struct BTree
 
     private:
     /* TODO 1.4.1 define fields */
+    using INodeOrLeaf = std::variant<INode, Leaf>;
+    std::unique_ptr<INodeOrLeaf> root_;
+    std::unique_ptr<Leaf> leaf_head_;
+    size_type size_;
+    size_type height_;
 
     public:
     /** Bulkloads the data in the range from `begin` (inclusive) to `end` (exclusive) into a fresh `BTree` and returns
@@ -388,6 +400,7 @@ struct BTree
     }
     {
         // auto keys_per_leaf = compute_num_keys_per_leaf();
+        // TODO remove code. just to debug the constant expression
         std::cout << "size " << BTree :: compute_num_keys_per_leaf () << std::endl;
 
         /* TODO 1.4.4 */
@@ -399,18 +412,18 @@ struct BTree
 
     public:
     ///> returns the size of the tree, i.e. the number of key-value pairs
-    size_type size() const { /* TODO 1.4.2 */ M_unreachable("not implemented"); }
+    size_type size() const { /* TODO 1.4.2 */ return size_; }
     ///> returns the number if inner/non-leaf levels, a.k.a. the height
-    size_type height() const { /* TODO 1.4.2 */ M_unreachable("not implemented"); }
+    size_type height() const { /* TODO 1.4.2 */ return height_; }
 
     /** Returns an `iterator` to the smallest key-value pair of the tree, if any, and `end()` otherwise. */
-    iterator begin() { /* TODO 1.4.3 */ M_unreachable("not implemented"); }
+    iterator begin() { /* TODO 1.4.3 */ return iterator(leaf_head_.get()); }
     /** Returns the past-the-end `iterator`. */
-    iterator end() { /* TODO 1.4.3 */ M_unreachable("not implemented");  } // return iterator(nullptr); }
+    iterator end() { /* TODO 1.4.3 */ return iterator(nullptr);   } 
     /** Returns an `const_iterator` to the smallest key-value pair of the tree, if any, and `end()` otherwise. */
-    const_iterator begin() const { /* TODO 1.4.3 */ M_unreachable("not implemented"); }
+    const_iterator begin() const { /* TODO 1.4.3 */ return const_iterator(leaf_head_.get());}
     /** Returns the past-the-end `iterator`. */
-    const_iterator end() const { /* TODO 1.4.3 */ M_unreachable("not implemented"); } //return const_iterator(nullptr); }
+    const_iterator end() const { /* TODO 1.4.3 */ return const_iterator(nullptr); }
     /** Returns an `const_iterator` to the smallest key-value pair of the tree, if any, and `end()` otherwise. */
     const_iterator cbegin() const { return begin(); }
     /** Returns the past-the-end `iterator`. */
