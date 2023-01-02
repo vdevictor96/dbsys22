@@ -125,7 +125,7 @@ struct BTree
         values_type values_;
         std::unique_ptr<Leaf> previous_;
         std::unique_ptr<Leaf> next_;
-        size_type n_keys_;
+        size_type n_keys_ = 0;
         // bool root_;
 
         /* TODO 1.2.3 define methods */
@@ -138,6 +138,7 @@ struct BTree
         : keys_(std::move(keys))
         , values_(std::move(values))
         { 
+            n_keys_ = keys_.size();
             // keys_ = keys;
             // values_ = values;
         }
@@ -174,47 +175,48 @@ struct BTree
         { return std::exchange(previous_, std::move(new_previous)); }
         
         std::tuple<std::unique_ptr<Leaf>, key_type> split() {
-            size_type pivot_position = len(keys_) / 2;
+            size_type pivot_position = keys_.size() / 2;
             key_type new_leaf_pivot = keys_[pivot_position];
             // create the new leaf
             keys_type new_keys;
             values_type new_values;
             std::copy(keys_.begin() + pivot_position, keys_.end() , new_keys.begin());
             std::copy(values_.begin() + pivot_position, values_.end() , new_values.begin());
-            Leaf new_leaf = new Leaf(new_keys, new_values);
+            std::unique_ptr<Leaf> new_leaf = std::make_unique<Leaf>(new_keys, new_values);
             // update the old leaf, the rest of the keys are consider to not exist, although they still have value
             n_keys_ = pivot_position;
-            next(new_leaf);
-            return std::make_tuple(new_leaf, new_leaf_pivot);
+            std::unique_ptr<Leaf> *unique_ptr = &new_leaf;
+            next(std::move(*unique_ptr));
+            return std::make_tuple(std::move(*unique_ptr), new_leaf_pivot);
         }
         
         /* Public methods */
         public:
-        std::tuple<std::unique_ptr<Leaf>, key_type> insert(key_type key, mapped_type value) {
-            if (is_full()) {
-                // split
-                std::tuple<std::unique_ptr<Leaf>, key_type> new_leaf_tuple = split();
-                std::unique_ptr<Leaf> new_leaf = new_leaf_tuple(0);
-                key_type new_leaf_pivot = new_leaf_tuple(1);
-                if (key < new_leaf_pivot) {
-                    // insert in this leaf
-                    insert(key, value);
-                    return nullptr;
-                } else {
-                    // insert in the new leaf
-                    new_leaf.insert(key, value);
-                    return new_leaf_tuple;
-                }
-            } else {
+        void insert(key_type key, mapped_type value) {
+        // std::tuple<std::unique_ptr<Leaf>, key_type> insert(key_type key, mapped_type value) {
+            // if (is_full()) {
+            //     // split
+            //     std::tuple<std::unique_ptr<Leaf>, key_type> new_leaf_tuple = split();
+            //     auto& new_leaf = std::get<0>(new_leaf_tuple);
+            //     auto& new_leaf_pivot = std::get<1>(new_leaf_tuple);
+            //     if (key < new_leaf_pivot) {
+            //         // insert in this leaf
+            //         return insert(key, value);
+                   
+            //     } else {
+            //         // insert in the new leaf
+            //         return new_leaf->insert(key, value);
+            //     }
+            // } else {
                 // base condition, inserts key in order
-                auto it = std::upper_bound(keys_.begin(), keys_.begin() + n_keys_, key);
-                keys_.insert(it, key);
-                int index = std::distance(keys_.begin(), it);
-                auto it_values = values_.begin() + index;
-                values_.insert(it_values, value);
+                // auto it = std::upper_bound(keys_.begin(), keys_.begin() + n_keys_, key);
+                // int index = std::distance(keys_.begin(), it);
+                keys_[n_keys_] = key;
+                values_[n_keys_] = value;
                 n_keys_++;
-                return nullptr;
-            }
+                std::unique_ptr<Leaf> imthis = std::make_unique<Leaf>(this);
+                // return std::make_tuple(imthis, keys_[0]); // return pointer to this leaf and first element (pivot)
+            // }
         }
 
         void remove(key_type key) {
@@ -383,8 +385,8 @@ struct BTree
 
     private:
     /* TODO 1.4.1 define fields */
-    using INodeOrLeaf = std::variant<INode, Leaf>;
-    std::unique_ptr<INodeOrLeaf> root_;
+    using Node = std::variant<INode, Leaf>;
+    std::unique_ptr<Node> root_;
     std::unique_ptr<Leaf> leaf_head_;
     size_type size_;
     size_type height_;
@@ -399,12 +401,32 @@ struct BTree
         mapped_type(std::move(it->second));
     }
     {
-        // auto keys_per_leaf = compute_num_keys_per_leaf();
-        // TODO remove code. just to debug the constant expression
-        std::cout << "size " << BTree :: compute_num_keys_per_leaf () << std::endl;
-
         /* TODO 1.4.4 */
-        M_unreachable("not implemented");
+        /* Create empty BTree */
+        BTree<Key, Value, NodeSizeInBytes> tree;
+        size_type const keys_per_leaf = tree.compute_num_keys_per_leaf();
+        size_type const keys_per_inode = tree.compute_num_keys_per_inode();
+        /* Set size of the tree to the number of elements in the vector */
+        tree.size_ = std::distance(begin, end);
+        size_type num_leaves = tree.size_ / keys_per_leaf + (tree.size_ % keys_per_leaf != 0);
+        size_type num_inodes = (num_leaves + keys_per_leaf - 1) / keys_per_leaf;
+        std::cout << "size_ " << tree.size_ << std::endl;
+        std::cout << "keys_per_leaf " << keys_per_leaf << std::endl;
+
+        std::cout << "num_leaves " << num_leaves << std::endl;
+        std::cout << "num_inodes " << num_inodes << std::endl;
+
+        It it = begin;
+        size_type i;
+        tree.leaf_head_ = std::unique_ptr<Leaf>(new Leaf());
+
+        for (it = begin, i = 0; it != end && i < keys_per_leaf; ++it) {
+            tree.leaf_head_->insert(std::move(it->first), std::move(it->second));
+            i++;
+        }
+        
+
+        return tree;
     }
 
     private:
