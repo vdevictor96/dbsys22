@@ -10,7 +10,8 @@
 #include <concepts>
 #include <cstdint>
 #include <utility>
-#include <variant>
+#include <cstring>
+
 
 
 /** Require that \tparam T is an *orderable* type, i.e. that two instances of \tparam T can be compared less than and
@@ -39,6 +40,11 @@ struct ref_pair
     First & first() const { return first_.get(); }
     Second & second() const { return second_.get(); }
 };
+
+template<typename First, typename Second>
+ref_pair<First, Second> make_ref_pair(First &first, Second &second) {
+    return ref_pair<First, Second>(first, second);
+}
 
 
 /** Implements a B+-tree of \tparam Key - \tparam Value pairs.  The exact size of a tree node is given as \tparam
@@ -131,8 +137,6 @@ struct BTree
             Node::leaf = true;
             next_ = nullptr;
             n_keys_ = 0;
-            // std::memset(entries, 0, (NUM_KEYS_PER_LEAF) * sizeof(keys_type));
-
         }
         /* C'tor */
         Leaf(keys_type keys, values_type values)
@@ -199,11 +203,21 @@ struct BTree
         INode() {
             Node::leaf = false;
             n_keys_ = 0;
-            // TODO add memset?
-            // std::memset(entries, 0, (NUM_KEYS_PER_LEAF) * sizeof(keys_type));
-
         }
-        // TODO add deconstructor?
+        /* Des'tor */
+        ~INode() {
+            for(size_type i = 0; i < n_keys_; i++) {
+                if(!(pointers_[i]->leaf)) {
+                    INode *inode = static_cast<INode*>(pointers_[i]);
+                    delete inode;
+                }
+                else {
+                    Leaf *leaf = static_cast<Leaf*>(pointers_[i]);
+                    delete leaf;
+                }
+            }
+        }
+
         /*----- Getters -----*/
         public:
         const keys_type & keys() const { return keys_; }
@@ -318,9 +332,8 @@ struct BTree
 
         ref_pair<const key_type, value_type> operator*() const {
             /* TODO 1.4.3 */
-            key_type const key = leaf_->keys_[leaf_key_idx_];
-            value_type value = leaf_->values_[leaf_key_idx_];
-            return ref_pair(key, value);
+            
+            return ref_pair<const key_type, value_type>(leaf_->keys_[leaf_key_idx_], leaf_->values_[leaf_key_idx_]);
         }
     };
 
@@ -393,9 +406,9 @@ struct BTree
                 leaves.push_back(current_leaf);
                 current_leaf = new_leaf;
             }
-            key_type const it_key = (*it).first;
-            mapped_type it_value = (*it).second;
-            current_leaf->add_key_value(ref_pair(it_key, it_value));
+            // ref_pair<const key_type, mapped_type> p = make_ref_pair(it->first, it->second);
+            // auto value = const_cast<mapped_type&>(it->second);
+            current_leaf->add_key_value(make_ref_pair(it->first, const_cast<mapped_type&>(it->second)));
         }
         leaves.push_back(current_leaf);
         last_leaf = current_leaf;
@@ -503,8 +516,20 @@ struct BTree
         last_key_idx_ = (last_leaf->size() ?  last_leaf->size() - 1 : 0);
     }
 
-    // TODO add deconstructor?
-
+    /* Des'tor */
+    public:
+    ~BTree() {
+        //recursively free childrensubtrees
+        if(!(root_->leaf)) {
+            INode *inode = static_cast<INode*>(root_);
+            delete inode; 
+        }
+        else {
+            Leaf *leaf = static_cast<Leaf*>(root_);
+            delete leaf;
+        }
+        size_ = height_ = 0;
+    }
     public:
     ///> returns the size of the tree, i.e. the number of key-value pairs
     size_type size() const { /* TODO 1.4.2 */ return size_; }
