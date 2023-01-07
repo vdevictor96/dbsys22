@@ -4,7 +4,6 @@
 #include <algorithm>
 #include <array>
 #include <vector>
-#include <queue>
 #include <bit>
 #include <cassert>
 #include <concepts>
@@ -239,36 +238,35 @@ struct BTree
         /*----- Setters -----*/
         void add_pointer (pointer_type pointer) {
             if(n_keys_ == 0) {
-                key_type const key_ = find_rightmost_key(pointer);
+                key_type const key_ = get_last_key_(pointer);
                 keys_[n_keys_] = key_;
             }
             else {
-                key_type const key_ = find_leftmost_key_(pointer);
+                key_type const key_ = get_first_key_(pointer);
                 keys_[n_keys_-1] = key_;
             }
             pointers_[n_keys_] = pointer;
             n_keys_++;
         }
-        // TODO rewrite find_rightmost and leftmost_
         private:
-        const key_type find_rightmost_key (Node *node) {
+        const key_type get_last_key_ (Node *node) {
             if(node->leaf) {
                 Leaf *leaf = static_cast<Leaf*>(node);
                 return (leaf->keys())[leaf->size()-1];
             }
             else {
                 INode *inode = static_cast<INode*>(node);
-                return find_rightmost_key(inode->pointer(inode->size()-1));
+                return get_last_key_(inode->pointer(inode->size()-1));
             }
         }
-        const key_type find_leftmost_key_(Node *node) {
+        const key_type get_first_key_(Node *node) {
             if(node->leaf) {
                 Leaf *leaf = static_cast<Leaf*>(node);
                 return (leaf->keys())[0];
             }
             else {
                 INode *inode = static_cast<INode*>(node);
-                return find_leftmost_key_(inode->pointer(0));
+                return get_first_key_(inode->pointer(0));
             }
         }
 
@@ -317,7 +315,7 @@ struct BTree
             if (leaf_key_idx_ == leaf_->size()) {
                 if (leaf_->has_next()) {
                     leaf_key_idx_ = 0;
-                    // TODO review & as it is different from codebase
+                    // TODO rewrite review & as it is different from codebase
                     leaf_ = &leaf_->next();
                 }
             }
@@ -325,7 +323,7 @@ struct BTree
         }
 
         the_iterator operator++(int) {
-            the_iterator copy(this);
+            the_iterator copy(*this);
             operator++();
             return copy;
         }
@@ -381,13 +379,11 @@ struct BTree
         mapped_type(std::move(it->second));
     }
     {
-        // M_unreachable("not implemented");
         /* TODO 1.4.4 */
         size_type height = 0;
         size_type size = std::distance(begin, end);
         Leaf *first_leaf, *last_leaf;
         size_type const keys_per_leaf = NUM_KEYS_PER_LEAF;
-        size_type const keys_per_inode = NUM_KEYS_PER_INODE;
         size_type num_leaves = size / keys_per_leaf + (size % keys_per_leaf != 0);
          
         if(size == 0) {
@@ -406,8 +402,6 @@ struct BTree
                 leaves.push_back(current_leaf);
                 current_leaf = new_leaf;
             }
-            // ref_pair<const key_type, mapped_type> p = make_ref_pair(it->first, it->second);
-            // auto value = const_cast<mapped_type&>(it->second);
             current_leaf->add_key_value(make_ref_pair(it->first, const_cast<mapped_type&>(it->second)));
         }
         leaves.push_back(current_leaf);
@@ -437,75 +431,9 @@ struct BTree
         height++;
 
         return BTree(root, size, height, first_leaf, last_leaf);
-
-
-        /* Create empty BTree */
-        // BTree<Key, Value, NodeSizeInBytes> tree;
-      
-        // /* Set size of the tree to the number of elements in the vector */
-        // tree.size_ = 
-        // tree.height_ = 0;
-        // size_type num_leaves = tree.size_ / keys_per_leaf + (tree.size_ % keys_per_leaf != 0);
-        // size_type num_inodes = (num_leaves + keys_per_leaf - 1) / keys_per_leaf;
-        // std::cout << "size_ " << tree.size_ << std::endl;
-        // std::cout << "keys_per_leaf " << keys_per_leaf << std::endl;
-
-        // std::cout << "num_leaves " << num_leaves << std::endl;
-        // std::cout << "num_inodes " << num_inodes << std::endl;
-
-        // //get all the data in a vector
-        // // std::vector<std::ref_pair<key_type, mapped_type>> pairs;
-        // // for (auto i = begin; i != end; ++i) {
-        // //     pairs.push_back(ref_pair((*i)->first,(*i)->second ));
-        // // }  
-        // // tree.size_ = pairs.size();
-        // if (tree.size_ == 0) {
-        //     // return empty tree
-        //     tree.root_ = nullptr;
-        //     tree.leaf_head_ = nullptr;
-        //     return tree;
-        // }
-        // std::queue<std::unique_ptr<Leaf>> leaves;
-
-        // std::unique_ptr<Leaf> current_leaf = std::make_unique<Leaf>();
-        // std::unique_ptr<Leaf> *first_leaf = &current_leaf;
-        // std::unique_ptr<Leaf> *last_leaf;
-        // It it;
-        // size_type i;
-        // for (it = begin, i = 0; it != end && i < keys_per_leaf; ++it) {
-        //     if(current_leaf->is_full()) {
-
-        //         auto new_leaf = std::make_unique<Leaf>();
-        //         current_leaf->next(new_leaf);
-        //         leaves.push(current_leaf);
-        //         current_leaf = new_leaf;
-        //     }
-        //     // tree.leaf_head_->insert(std::move(it->first), std::move(it->second));
-        //     // current_leaf->insert(std::move(it->first), std::move(it->second));
-        //     current_leaf->insert(it->first, it->second);
-        //     i++;
-        // }
-        // leaves.push(current_leaf);
-        // last_leaf = &current_leaf;
-        // if(num_leaves == 1) {
-        //     // TODO fix setting root being Node and not leaf
-        //     // tree.root_ = std::move(current_leaf);
-        //     tree.leaf_head_ = std::move(current_leaf);
-        //     return tree;
-        // }
-
-        // return tree;
     }
 
     private:
-    BTree()
-    { 
-        root_ = nullptr;
-        size_ = height_ = 0;
-        first_leaf_ = nullptr;
-        first_key_idx_ = 0;
-    }
-
     BTree(Node* root, size_type size, size_type height, Leaf *first_leaf, Leaf *last_leaf) {
         root_ = root;
         size_ = size;
@@ -562,35 +490,188 @@ struct BTree
     /** Returns a `const_iterator` to the first element with the given \p key, if any, and `end()` otherwise. */
     const_iterator find(const key_type &key) const {
         /* TODO 1.4.5 */
-        M_unreachable("not implemented");
+        if (size_ < 1) return cend();
+
+        Node* current_node = root_;
+        while (!(current_node->leaf)) {
+            INode* inode = static_cast<INode*>(current_node);
+            size_type index = 0;
+            bool found = false;
+
+            for (index = 0; index < inode->size() - 1; index++) {
+                if (key < inode->keys()[index]) {
+                    found = true;
+                    break;
+                }
+            }
+            if (!inode->is_full() && !found) {
+                index = inode->size() - 1;
+            }
+            if (index < inode->size()) {
+                current_node = inode->pointer(index);
+            }
+            else {
+                 return cend();
+            } 
+        }
+
+        Leaf* leaf = static_cast<Leaf*>(current_node);
+        for (size_type i = 0; i < leaf->size(); i++) {
+            if (leaf->keys()[i] == key) {
+                return const_iterator(leaf, i);
+            }
+        }
+        // try in next leaf
+        if (leaf->has_next()) {
+            Leaf *next_leaf = &leaf->next();
+            for (size_type i = 0; i < next_leaf->size(); i++) {
+                if (next_leaf->keys()[i] == key) {
+                    return const_iterator(next_leaf, i);
+                }
+            }
+        }
+        return cend();
     }
     /** Returns an `iterator` to the first element with the given \p key, if any, and `end()` otherwise. */
     iterator find(const key_type &key) {
         /* TODO 1.4.5 */
-        M_unreachable("not implemented");
+
+        if (size_ < 1) return end();
+
+        Node* current_node = root_;
+        while (!(current_node->leaf)) {
+            INode* inode = static_cast<INode*>(current_node);
+            size_type index = 0;
+            bool found = false;
+
+            for (index = 0; index < inode->size() - 1; index++) {
+                if (key < inode->keys()[index]) {
+                    found = true;
+                    break;
+                }
+            }
+            if (!inode->is_full() && !found) {
+                index = inode->size() - 1;
+            }
+            if (index < inode->size()) {
+                current_node = inode->pointer(index);
+            }
+            else {
+                 return end();
+            } 
+        }
+
+        Leaf* leaf = static_cast<Leaf*>(current_node);
+        for (size_type i = 0; i < leaf->size(); i++) {
+            if (leaf->keys()[i] == key) {
+                return iterator(leaf, i);
+            }
+        }
+        // try in next leaf
+        if (leaf->has_next()) {
+            Leaf *next_leaf = &leaf->next();
+            for (size_type i = 0; i < next_leaf->size(); i++) {
+                if (next_leaf->keys()[i] == key) {
+                    return iterator(next_leaf, i);
+                }
+            }
+        }
+        return end();
     }
 
+    
     /** Returns a `const_range` of all elements with key in the interval `[lo, hi)`, i.e. `lo` including and `hi`
      * excluding. */
     const_range find_range(const key_type &lo, const key_type &hi) const {
         /* TODO 1.4.6 */
-        M_unreachable("not implemented");
+        if (size_ < 1) {
+            return const_range(iterator(nullptr, nullptr), iterator(nullptr, nullptr));
+        }
+
+        the_iterator start = find_lower_key(lo, root_);
+        if ((start == end()) || ((*start).first() >= hi)) {
+            return const_range(iterator(nullptr, nullptr), iterator(nullptr, nullptr));
+        }
+
+        the_iterator fin = start;
+        while (!(fin == end())) {
+            if (((*fin).first()) >= hi) {
+                break;
+            }
+            fin++;
+        }
+        return const_range(start, fin);
     }
     /** Returns a `range` of all elements with key in the interval `[lo, hi)`, i.e. `lo` including and `hi` excluding.
      * */
     range find_range(const key_type &lo, const key_type &hi) {
         /* TODO 1.4.6 */
-        M_unreachable("not implemented");
+        if (size_ < 1) {
+            return range(end(), end());
+        }
+
+        iterator start = find_lower_key(lo, root_);
+        if ((start == end()) || ((*start).first() >= hi)) {
+            return range(end(), end());
+        }
+
+        iterator fin = start;
+        while (!(fin == end())) {
+            if (((*fin).first()) >= hi) {
+                break;
+            }
+            fin++;
+        }
+        return range(start, fin);
     }
 
     /** Returns a `const_range` of all elements with key equals to \p key. */
     const_range equal_range(const key_type &key) const {
         /* TODO 1.4.7 */
-        M_unreachable("not implemented");
+        return find_range(key, key+1);
     }
     /** Returns a `range` of all elements with key equals to \p key. */
     range equal_range(const key_type &key) {
         /* TODO 1.4.7 */
-        M_unreachable("not implemented");
+        return find_range(key, key+1);
+    }
+
+    private:
+    iterator find_lower_key(const key_type& key, Node* root) {
+        Node* current_node = root;
+        while (!(current_node->leaf)) {
+            INode* inode = static_cast<INode*>(current_node);
+            size_type index = 0;
+            bool found = false;
+
+            for (index = 0; index < inode->size() - 1; index++) {
+                if (key <= inode->keys()[index]) {
+                    found = true;
+                    break;
+                }
+            }
+            if (!inode->is_full() && !found) {
+                index = inode->size() - 1;
+            }
+            if (index < inode->size()) {
+                current_node = inode->pointer(index);
+            }
+        }
+        Leaf* leaf = static_cast<Leaf*>(current_node);
+        for (size_type i = 0; i < leaf->size(); i++) {
+            if (leaf->keys()[i] >= key) {
+                return iterator(leaf, i);
+            }
+        }
+        // try in next leaf
+        if (leaf->has_next()) {
+            Leaf *next_leaf = &leaf->next();
+            for (size_type i = 0; i < next_leaf->size(); i++) {
+                if (next_leaf->keys()[i] >= key) {
+                    return iterator(next_leaf, i);
+                }
+            }
+        }
+        return end();
     }
 };
