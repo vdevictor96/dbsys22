@@ -9,7 +9,6 @@
 #include <cassert>
 #include <concepts>
 #include <cstdint>
-// TODO remove include? exchange fails
 #include <utility>
 #include <variant>
 
@@ -58,39 +57,32 @@ struct BTree
     using mapped_type = Value;
     using size_type = std::size_t;
 
+    struct Node {
+        bool leaf;
+    };
+
     ///> the size of BTree nodes (both `INode` and `Leaf`)
     static constexpr size_type NODE_SIZE_IN_BYTES = NodeSizeInBytes;
     ///> the aignment of BTree nodes (both `INode` and `Leaf`)
     static constexpr size_type NODE_ALIGNMENT_IN_BYTES = NodeAlignmentInBytes;
 
     private:
+    using key_value_type = ref_pair<key_type, mapped_type>;
+    using pointer_type = Node*;
+
+
+
     /** Computes the number of key-value pairs per `Leaf`, considering the specified `NodeSizeInBytes`. */
     static constexpr size_type compute_num_keys_per_leaf()
     {
         /* TODO 1.2.1 */       
-        // std::cout << "node size in bytes " << NODE_SIZE_IN_BYTES << std::endl;
-        // std::cout << "size key " << sizeof(key_type) << std::endl;
-        // std::cout << "align key " << alignof(key_type) << std::endl;
         // Size taken by pointer to the previous and next leaf
-        size_type metadata_size = sizeof(Leaf*) * 2;
+        size_type metadata_size = sizeof(Leaf*);
         // Size taken by flag indicating is leaf node or not
         metadata_size += sizeof(bool);
         // Size taken by size_type indicating the number of current keys in the leaf
         metadata_size += sizeof(size_type);
-        // std::cout << "size ref_pair " << sizeof(ref_pair) << std::endl;
-        // TODO check which type is bigger, put them all together and then the other type
-        size_type offset = 0;
-        size_type key_align = alignof(key_type);
-        size_type mapped_align = alignof(mapped_type);
-        // add key
-        offset = offset + ((key_align - (offset % key_align)) % key_align);
-        offset += sizeof(key_type);
-        // add mapped
-        offset = offset + ((mapped_align - (offset % mapped_align)) % mapped_align);
-        offset += sizeof(mapped_type);
-
-        // value of offset for next key-value pair
-        size_type entry_size = offset + ((key_align - (offset % key_align)) % key_align);
+        size_type entry_size = sizeof(key_value_type); //sizeof(key_type) + sizeof(mapped_type);
         // calculate num_key_value_pairs
         size_type num_entries = (NODE_SIZE_IN_BYTES - metadata_size) / entry_size;
         return num_entries;
@@ -106,8 +98,11 @@ struct BTree
         size_type metadata_size = sizeof(bool);
         // Size taken by size_type indicating the number of current keys in the node
         metadata_size += sizeof(size_type);
+        size_type entry_size = sizeof(key_type) + sizeof(INode*); //sizeof(key_type) + sizeof(mapped_type);
+        // calculate num_key_value_pairs
+        size_type num_entries = (NODE_SIZE_IN_BYTES - metadata_size + sizeof(key_type)) / entry_size;
+        return num_entries - 1;
        
-        return 0;
        
     };
 
@@ -118,23 +113,27 @@ struct BTree
     static constexpr size_type NUM_KEYS_PER_INODE = compute_num_keys_per_inode();
 
     /** This class implements leaves of the B+-tree. */
-    struct alignas(NODE_ALIGNMENT_IN_BYTES) Leaf
+    struct alignas(NODE_ALIGNMENT_IN_BYTES) Leaf : Node
     {
         /* TODO 1.2.2 define fields */
         using keys_type = std::array<key_type, NUM_KEYS_PER_LEAF>;
         using values_type = std::array<mapped_type, NUM_KEYS_PER_LEAF>;
         keys_type keys_;
         values_type values_;
-        std::unique_ptr<Leaf> previous_;
-        std::unique_ptr<Leaf> next_;
-        size_type n_keys_ = 0;
-        // bool root_;
+        Leaf* next_;
+        size_type n_keys_;
 
         /* TODO 1.2.3 define methods */
         /*----- C'tors -----*/
         public:
         /* Empty C'tor */
-        Leaf() {}
+        Leaf() {
+            Node::leaf = true;
+            next_ = nullptr;
+            n_keys_ = 0;
+            // std::memset(entries, 0, (NUM_KEYS_PER_LEAF) * sizeof(keys_type));
+
+        }
         /* C'tor */
         Leaf(keys_type keys, values_type values)
         : keys_(std::move(keys))
@@ -150,157 +149,81 @@ struct BTree
         const keys_type & keys() const { return keys_; }
         values_type & values() { return values_; }
         const values_type & values() const { return values_; }
-        bool has_previous() const { return bool(previous_); }
-        Leaf & previous() { return *previous_; }
-        const Leaf & previous() const { return *previous_; }
+        key_value_type* get_key_value(int index) {
+            return ref_pair(&keys_[index], &values_[index]);
+        }
         bool has_next() const { return bool(next_); }
         Leaf & next() { return *next_; }
         const Leaf & next() const { return *next_; }
         
-        const size_type & n_keys() const { return n_keys_;}
-        // bool is_root() {
-        //     return root_;
-        // }
+        const size_type & size() const { return n_keys_;}
+
         bool is_full() {
-            return NUM_KEYS_PER_LEAF <= n_keys();
+            return NUM_KEYS_PER_LEAF <= n_keys_;
         }
         bool is_empty() {
-            return 0 == n_keys();
+            return 0 == n_keys_;
         }
 
         /*----- Setters -----*/
         public:
-        std::unique_ptr<Leaf> next(std::unique_ptr<Leaf> new_next)
-        { return std::exchange(next_, std::move(new_next)); }
-
-        std::unique_ptr<Leaf> previous(std::unique_ptr<Leaf> new_previous)
-        { return std::exchange(previous_, std::move(new_previous)); }
-        
-        std::tuple<std::unique_ptr<Leaf>, key_type> split() {
-            size_type pivot_position = keys_.size() / 2;
-            key_type new_leaf_pivot = keys_[pivot_position];
-            // create the new leaf
-            keys_type new_keys;
-            values_type new_values;
-            std::copy(keys_.begin() + pivot_position, keys_.end() , new_keys.begin());
-            std::copy(values_.begin() + pivot_position, values_.end() , new_values.begin());
-            std::unique_ptr<Leaf> new_leaf = std::make_unique<Leaf>(new_keys, new_values);
-            // update the old leaf, the rest of the keys are consider to not exist, although they still have value
-            n_keys_ = pivot_position;
-            std::unique_ptr<Leaf> *unique_ptr = &new_leaf;
-            next(std::move(*unique_ptr));
-            return std::make_tuple(std::move(*unique_ptr), new_leaf_pivot);
-        }
-        
-        /* Public methods */
-        public:
-        void insert(key_type key, mapped_type value) {
-        // std::tuple<std::unique_ptr<Leaf>, key_type> insert(key_type key, mapped_type value) {
-            // if (is_full()) {
-            //     // split
-            //     std::tuple<std::unique_ptr<Leaf>, key_type> new_leaf_tuple = split();
-            //     auto& new_leaf = std::get<0>(new_leaf_tuple);
-            //     auto& new_leaf_pivot = std::get<1>(new_leaf_tuple);
-            //     if (key < new_leaf_pivot) {
-            //         // insert in this leaf
-            //         return insert(key, value);
-                   
-            //     } else {
-            //         // insert in the new leaf
-            //         return new_leaf->insert(key, value);
-            //     }
-            // } else {
-                // base condition, inserts key in order
-                // auto it = std::upper_bound(keys_.begin(), keys_.begin() + n_keys_, key);
-                // int index = std::distance(keys_.begin(), it);
-                keys_[n_keys_] = key;
-                values_[n_keys_] = value;
-                n_keys_++;
-                // std::unique_ptr<Leaf> imthis = &this;
-                // return std::make_tuple(imthis, keys_[0]); // return pointer to this leaf and first element (pivot)
-            // }
+        Leaf * next(Leaf* new_next)
+        { 
+            auto old = next_;
+            next_ = new_next;
+            return old;
         }
 
-        void remove(key_type key) {
-            // Find the index of the element to delete
-            int index = -1;
-            for (int i = 0; i < n_keys_; i++) {
-                if (keys_[i] == key) {
-                index = i;
-                break;
-                }
-            }
-            // If the element was found, shift all the elements after it one position to the left
-            if (index != -1) {
-                for (int i = index; i < n_keys_ - 1; i++) {
-                    keys_[i] = keys_[i + 1];
-                }
-                n_keys_--;
-            } else {
-                return;
-            }
-            // TODO after deleting check if you have the minimum size of key-values and if not merge
-            // TODO do we need pointers for previous and next leaf? that is acyclic?
-            size_type min_keys = NUM_KEYS_PER_LEAF / 2;
-            bool merged = false;
-            if (n_keys_ <= min_keys) {
-                // Merge with left sibling
-                if (has_previous()) {
-                    Leaf* previous = previous();
-                    size_type previous_keys = previous->n_keys();
-                    if (previous_keys + n_keys_ <= NUM_KEYS_PER_LEAF) {
-                        merged = true;
-                        // Append all keys and values from current leaf to previous
-                        for (int i = 0; i < n_keys_; i++) {
-                            previous->keys_[previous_keys + i] = keys_[i];
-                            previous->values_[previous_keys + i] = values_[i];
-                        }
-                        previous->n_keys_ += n_keys_;
-                        
-                        // Remove the current leaf node
-                        // TODO
-                        // deleteLeaf(*this);
-                        // return info to parent inner node
-                        // deleteKeyFromNode(parent, parent->keys[index]);
-                    } 
-                }
-                // As second option, merge with right sibling
-                if (has_next() && !merged)  {
-                    Leaf* next = next();
-                    size_type next_keys = next->n_keys();
-                    if (next_keys + n_keys_ <= NUM_KEYS_PER_LEAF) {
-                        merged = true;
-                        // Append all keys and values from next leaf to current
-                        for (int i = 0; i < next_keys; i++) {
-                            keys_[i + n_keys_] = next->keys_[i];
-                            values_[i + n_keys_] = next->values_[i];
-                        }
-                        n_keys_ += next->n_keys_;
-                       
-
-                        // Remove the right leaf node
-                        // TODO
-                        // deleteLeaf(next);
-                        // return info to parent inner node
-                        // deleteKeyFromNode(parent, parent->keys[index]);
-                    } 
-                }
-
-            }
+        void add_key_value(key_value_type pair) {
+            keys_[n_keys_] = pair.first();
+            values_[n_keys_] = pair.second();
+            n_keys_++;
         }
-        // private:
-        // TODO
-        // deleteLeaf()
     };
     static_assert(sizeof(Leaf) <= NODE_SIZE_IN_BYTES, "Leaf exceeds its size limit");
 
     /** This class implements inner nodes of the B+-tree. */
-    struct alignas(NODE_ALIGNMENT_IN_BYTES) INode
+    struct alignas(NODE_ALIGNMENT_IN_BYTES) INode : Node
     {
         /* TODO 1.3.2 define fields */
+        using keys_type = std::array<key_type, NUM_KEYS_PER_INODE>;
+        using pointers_type = std::array<pointer_type, NUM_KEYS_PER_INODE + 1>;
+        keys_type keys_;
+        pointers_type pointers_;
+        size_type n_keys_;
 
         /* TODO 1.3.3 define methods */
+        /*----- C'tors -----*/
+        public:
+        /* Empty C'tor */
+        INode() {
+            Node::leaf = false;
+            n_keys_ = 0;
+            // TODO add memset?
+            // std::memset(entries, 0, (NUM_KEYS_PER_LEAF) * sizeof(keys_type));
+
+        }
+        // TODO add deconstructor?
+        /*----- Getters -----*/
+        public:
+        const keys_type & keys() const { return keys_; }
+        pointers_type & pointers() const { return pointers_; }
+        const size_type & size() const { return n_keys_;}
+        const key_type key(int index) {
+            return keys_[index];
+        }
+        pointer_type pointer(int index) {
+            return pointers_[index];
+        }
+        bool is_full() {
+            return NUM_KEYS_PER_INODE + 1 == n_keys_;
+        }
+        bool is_empty() {
+            return 0 == n_keys_;
+        }
+
     };
+
     static_assert(sizeof(INode) <= NODE_SIZE_IN_BYTES, "INode exceeds its size limit");
 
     private:
@@ -340,9 +263,12 @@ struct BTree
         the_iterator & operator++() {
             /* TODO 1.4.3 */
             leaf_key_idx_++;
-            if (leaf_key_idx_ > leaf_->n_keys()) {
-                leaf_key_idx_ = 0;
-                leaf_ = &leaf_->next(); 
+            if (leaf_key_idx_ == leaf_->size()) {
+                if (leaf_->has_next()) {
+                    leaf_key_idx_ = 0;
+                    // TODO review & as it is different from codebase
+                    leaf_ = &leaf_->next();
+                }
             }
             return *this;
         }
@@ -387,11 +313,13 @@ struct BTree
 
     private:
     /* TODO 1.4.1 define fields */
-    using Node = std::variant<INode, Leaf>;
-    std::unique_ptr<Node> root_;
-    std::unique_ptr<Leaf> leaf_head_;
+    Node* root_;
     size_type size_;
     size_type height_;
+    Leaf *first_leaf_, *last_leaf_;
+    size_type first_key_idx_, last_key_idx_;
+
+
 
     public:
     /** Bulkloads the data in the range from `begin` (inclusive) to `end` (exclusive) into a fresh `BTree` and returns
@@ -403,68 +331,87 @@ struct BTree
         mapped_type(std::move(it->second));
     }
     {
+        M_unreachable("not implemented");
         /* TODO 1.4.4 */
         /* Create empty BTree */
-        BTree<Key, Value, NodeSizeInBytes> tree;
-        size_type const keys_per_leaf = tree.compute_num_keys_per_leaf();
-        size_type const keys_per_inode = tree.compute_num_keys_per_inode();
-        /* Set size of the tree to the number of elements in the vector */
-        tree.size_ = std::distance(begin, end);
-        tree.height_ = 0;
-        size_type num_leaves = tree.size_ / keys_per_leaf + (tree.size_ % keys_per_leaf != 0);
-        size_type num_inodes = (num_leaves + keys_per_leaf - 1) / keys_per_leaf;
-        std::cout << "size_ " << tree.size_ << std::endl;
-        std::cout << "keys_per_leaf " << keys_per_leaf << std::endl;
+        // BTree<Key, Value, NodeSizeInBytes> tree;
+        // size_type const keys_per_leaf = tree.compute_num_keys_per_leaf();
+        // size_type const keys_per_inode = tree.compute_num_keys_per_inode();
+        // /* Set size of the tree to the number of elements in the vector */
+        // tree.size_ = std::distance(begin, end);
+        // tree.height_ = 0;
+        // size_type num_leaves = tree.size_ / keys_per_leaf + (tree.size_ % keys_per_leaf != 0);
+        // size_type num_inodes = (num_leaves + keys_per_leaf - 1) / keys_per_leaf;
+        // std::cout << "size_ " << tree.size_ << std::endl;
+        // std::cout << "keys_per_leaf " << keys_per_leaf << std::endl;
 
-        std::cout << "num_leaves " << num_leaves << std::endl;
-        std::cout << "num_inodes " << num_inodes << std::endl;
+        // std::cout << "num_leaves " << num_leaves << std::endl;
+        // std::cout << "num_inodes " << num_inodes << std::endl;
 
-        //get all the data in a vector
-        // std::vector<std::ref_pair<key_type, mapped_type>> pairs;
-        // for (auto i = begin; i != end; ++i) {
-        //     pairs.push_back(ref_pair((*i)->first,(*i)->second ));
-        // }  
-        // tree.size_ = pairs.size();
-        if (tree.size_ == 0) {
-            // return empty tree
-            tree.root_ = nullptr;
-            tree.leaf_head_ = nullptr;
-            return tree;
-        }
-        std::queue<std::unique_ptr<Leaf>> leaves;
+        // //get all the data in a vector
+        // // std::vector<std::ref_pair<key_type, mapped_type>> pairs;
+        // // for (auto i = begin; i != end; ++i) {
+        // //     pairs.push_back(ref_pair((*i)->first,(*i)->second ));
+        // // }  
+        // // tree.size_ = pairs.size();
+        // if (tree.size_ == 0) {
+        //     // return empty tree
+        //     tree.root_ = nullptr;
+        //     tree.leaf_head_ = nullptr;
+        //     return tree;
+        // }
+        // std::queue<std::unique_ptr<Leaf>> leaves;
 
-        std::unique_ptr<Leaf> current_leaf = std::make_unique<Leaf>();
-        std::unique_ptr<Leaf> *first_leaf = &current_leaf;
-        std::unique_ptr<Leaf> *last_leaf;
-        It it;
-        size_type i;
-        for (it = begin, i = 0; it != end && i < keys_per_leaf; ++it) {
-            if(current_leaf->is_full()) {
+        // std::unique_ptr<Leaf> current_leaf = std::make_unique<Leaf>();
+        // std::unique_ptr<Leaf> *first_leaf = &current_leaf;
+        // std::unique_ptr<Leaf> *last_leaf;
+        // It it;
+        // size_type i;
+        // for (it = begin, i = 0; it != end && i < keys_per_leaf; ++it) {
+        //     if(current_leaf->is_full()) {
 
-                auto new_leaf = std::make_unique<Leaf>();
-                current_leaf->next(new_leaf);
-                leaves.push(current_leaf);
-                current_leaf = new_leaf;
-            }
-            // tree.leaf_head_->insert(std::move(it->first), std::move(it->second));
-            // current_leaf->insert(std::move(it->first), std::move(it->second));
-            current_leaf->insert(it->first, it->second);
-            i++;
-        }
-        leaves.push(current_leaf);
-        last_leaf = &current_leaf;
-        if(num_leaves == 1) {
-            // TODO fix setting root being Node and not leaf
-            // tree.root_ = std::move(current_leaf);
-            tree.leaf_head_ = std::move(current_leaf);
-            return tree;
-        }
+        //         auto new_leaf = std::make_unique<Leaf>();
+        //         current_leaf->next(new_leaf);
+        //         leaves.push(current_leaf);
+        //         current_leaf = new_leaf;
+        //     }
+        //     // tree.leaf_head_->insert(std::move(it->first), std::move(it->second));
+        //     // current_leaf->insert(std::move(it->first), std::move(it->second));
+        //     current_leaf->insert(it->first, it->second);
+        //     i++;
+        // }
+        // leaves.push(current_leaf);
+        // last_leaf = &current_leaf;
+        // if(num_leaves == 1) {
+        //     // TODO fix setting root being Node and not leaf
+        //     // tree.root_ = std::move(current_leaf);
+        //     tree.leaf_head_ = std::move(current_leaf);
+        //     return tree;
+        // }
 
-        return tree;
+        // return tree;
     }
 
     private:
-    BTree() { }
+    BTree()
+    { 
+        root_ = nullptr;
+        size_ = height_ = 0;
+        first_leaf_ = nullptr;
+        first_key_idx_ = 0;
+    }
+
+    BTree(Node* root, size_type size, size_type height, Leaf *first_leaf, Leaf *last_leaf) {
+        root_ = root;
+        size_ = size;
+        height_ = height;
+        first_leaf_ = first_leaf;
+        last_leaf_ = last_leaf;
+        first_key_idx_ = 0;
+        last_key_idx_ = (last_leaf->size() ?  last_leaf->size() - 1 : 0);
+    }
+
+    // TODO add deconstructor?
 
     public:
     ///> returns the size of the tree, i.e. the number of key-value pairs
@@ -473,13 +420,23 @@ struct BTree
     size_type height() const { /* TODO 1.4.2 */ return height_; }
 
     /** Returns an `iterator` to the smallest key-value pair of the tree, if any, and `end()` otherwise. */
-    iterator begin() { /* TODO 1.4.3 */ return iterator(leaf_head_.get()); }
+    iterator begin() { /* TODO 1.4.3 */ return iterator(first_leaf_, first_key_idx_); }
     /** Returns the past-the-end `iterator`. */
-    iterator end() { /* TODO 1.4.3 */ return iterator(nullptr);   } 
+    iterator end() { /* TODO 1.4.3 */ 
+        if (size_ == 0) {
+            return iterator(first_leaf_, first_key_idx_);
+        } 
+        return ++iterator(last_leaf_, last_key_idx_);
+    } 
     /** Returns an `const_iterator` to the smallest key-value pair of the tree, if any, and `end()` otherwise. */
-    const_iterator begin() const { /* TODO 1.4.3 */ return const_iterator(leaf_head_.get());}
+    const_iterator begin() const { /* TODO 1.4.3 */ return const_iterator(first_leaf_, first_key_idx_);}
     /** Returns the past-the-end `iterator`. */
-    const_iterator end() const { /* TODO 1.4.3 */ return const_iterator(nullptr); }
+    const_iterator end() const { /* TODO 1.4.3 */
+        if (size_ == 0) {
+            return const_iterator(first_leaf_, first_key_idx_);
+        } 
+        return ++const_iterator(last_leaf_, last_key_idx_);
+    }
     /** Returns an `const_iterator` to the smallest key-value pair of the tree, if any, and `end()` otherwise. */
     const_iterator cbegin() const { return begin(); }
     /** Returns the past-the-end `iterator`. */
