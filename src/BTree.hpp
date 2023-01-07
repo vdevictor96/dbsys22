@@ -67,7 +67,7 @@ struct BTree
     static constexpr size_type NODE_ALIGNMENT_IN_BYTES = NodeAlignmentInBytes;
 
     private:
-    using key_value_type = ref_pair<key_type, mapped_type>;
+    using key_value_type = ref_pair<const key_type, mapped_type>;
     using pointer_type = Node*;
 
 
@@ -222,6 +222,43 @@ struct BTree
             return 0 == n_keys_;
         }
 
+        /*----- Setters -----*/
+        void add_pointer (pointer_type pointer) {
+            if(n_keys_ == 0) {
+                key_type const key_ = find_rightmost_key(pointer);
+                keys_[n_keys_] = key_;
+            }
+            else {
+                key_type const key_ = find_leftmost_key_(pointer);
+                keys_[n_keys_-1] = key_;
+            }
+            pointers_[n_keys_] = pointer;
+            n_keys_++;
+        }
+        // TODO rewrite find_rightmost and leftmost_
+        private:
+        const key_type find_rightmost_key (Node *node) {
+            if(node->leaf) {
+                Leaf *leaf = static_cast<Leaf*>(node);
+                return (leaf->keys())[leaf->size()-1];
+            }
+            else {
+                INode *inode = static_cast<INode*>(node);
+                return find_rightmost_key(inode->pointer(inode->size()-1));
+            }
+        }
+        const key_type find_leftmost_key_(Node *node) {
+            if(node->leaf) {
+                Leaf *leaf = static_cast<Leaf*>(node);
+                return (leaf->keys())[0];
+            }
+            else {
+                INode *inode = static_cast<INode*>(node);
+                return find_leftmost_key_(inode->pointer(0));
+            }
+        }
+
+       
     };
 
     static_assert(sizeof(INode) <= NODE_SIZE_IN_BYTES, "INode exceeds its size limit");
@@ -331,14 +368,69 @@ struct BTree
         mapped_type(std::move(it->second));
     }
     {
-        M_unreachable("not implemented");
+        // M_unreachable("not implemented");
         /* TODO 1.4.4 */
+        size_type height = 0;
+        size_type size = std::distance(begin, end);
+        Leaf *first_leaf, *last_leaf;
+        size_type const keys_per_leaf = NUM_KEYS_PER_LEAF;
+        size_type const keys_per_inode = NUM_KEYS_PER_INODE;
+        size_type num_leaves = size / keys_per_leaf + (size % keys_per_leaf != 0);
+         
+        if(size == 0) {
+            Leaf *empty_leaf = new Leaf();
+            return BTree(empty_leaf, size, height, empty_leaf, empty_leaf);
+        }
+
+        std::vector<Node*> inodes, leaves;
+
+        Leaf * current_leaf = new Leaf();
+        first_leaf = current_leaf;
+        for (It it = begin; it != end; ++it) {
+            if(current_leaf->is_full()) {
+                Leaf *new_leaf = new Leaf();
+                current_leaf->next(new_leaf);
+                leaves.push_back(current_leaf);
+                current_leaf = new_leaf;
+            }
+            key_type const it_key = (*it).first;
+            mapped_type it_value = (*it).second;
+            current_leaf->add_key_value(ref_pair(it_key, it_value));
+        }
+        leaves.push_back(current_leaf);
+        last_leaf = current_leaf;
+
+        if (num_leaves == 1) {
+            return BTree(first_leaf, size, height, first_leaf, first_leaf);
+        } else {
+            while(leaves.size() > 1) {
+                INode *current_inode = new INode();
+                height++;
+                for (size_type i = 0; i < leaves.size(); i++) {
+                    if (current_inode->is_full()) {
+                        INode *new_inode = new INode();
+                        inodes.push_back(current_inode);
+                        current_inode = new_inode;
+                    }
+                    Node *node = leaves[i];
+                    current_inode->add_pointer(node);
+                }
+                inodes.push_back(current_inode);
+                leaves = inodes;
+                inodes.clear();
+            }
+        }
+        INode *root = static_cast<INode*>(leaves.front());
+        height++;
+
+        return BTree(root, size, height, first_leaf, last_leaf);
+
+
         /* Create empty BTree */
         // BTree<Key, Value, NodeSizeInBytes> tree;
-        // size_type const keys_per_leaf = tree.compute_num_keys_per_leaf();
-        // size_type const keys_per_inode = tree.compute_num_keys_per_inode();
+      
         // /* Set size of the tree to the number of elements in the vector */
-        // tree.size_ = std::distance(begin, end);
+        // tree.size_ = 
         // tree.height_ = 0;
         // size_type num_leaves = tree.size_ / keys_per_leaf + (tree.size_ % keys_per_leaf != 0);
         // size_type num_inodes = (num_leaves + keys_per_leaf - 1) / keys_per_leaf;
