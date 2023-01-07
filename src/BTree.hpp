@@ -3,6 +3,8 @@
 #include "mutable/util/macro.hpp"
 #include <algorithm>
 #include <array>
+#include <vector>
+#include <queue>
 #include <bit>
 #include <cassert>
 #include <concepts>
@@ -167,7 +169,7 @@ struct BTree
         }
 
         /*----- Setters -----*/
-        private:
+        public:
         std::unique_ptr<Leaf> next(std::unique_ptr<Leaf> new_next)
         { return std::exchange(next_, std::move(new_next)); }
 
@@ -214,7 +216,7 @@ struct BTree
                 keys_[n_keys_] = key;
                 values_[n_keys_] = value;
                 n_keys_++;
-                std::unique_ptr<Leaf> imthis = std::make_unique<Leaf>(this);
+                // std::unique_ptr<Leaf> imthis = &this;
                 // return std::make_tuple(imthis, keys_[0]); // return pointer to this leaf and first element (pivot)
             // }
         }
@@ -408,6 +410,7 @@ struct BTree
         size_type const keys_per_inode = tree.compute_num_keys_per_inode();
         /* Set size of the tree to the number of elements in the vector */
         tree.size_ = std::distance(begin, end);
+        tree.height_ = 0;
         size_type num_leaves = tree.size_ / keys_per_leaf + (tree.size_ % keys_per_leaf != 0);
         size_type num_inodes = (num_leaves + keys_per_leaf - 1) / keys_per_leaf;
         std::cout << "size_ " << tree.size_ << std::endl;
@@ -416,15 +419,46 @@ struct BTree
         std::cout << "num_leaves " << num_leaves << std::endl;
         std::cout << "num_inodes " << num_inodes << std::endl;
 
-        It it = begin;
-        size_type i;
-        tree.leaf_head_ = std::unique_ptr<Leaf>(new Leaf());
+        //get all the data in a vector
+        // std::vector<std::ref_pair<key_type, mapped_type>> pairs;
+        // for (auto i = begin; i != end; ++i) {
+        //     pairs.push_back(ref_pair((*i)->first,(*i)->second ));
+        // }  
+        // tree.size_ = pairs.size();
+        if (tree.size_ == 0) {
+            // return empty tree
+            tree.root_ = nullptr;
+            tree.leaf_head_ = nullptr;
+            return tree;
+        }
+        std::queue<std::unique_ptr<Leaf>> leaves;
 
+        std::unique_ptr<Leaf> current_leaf = std::make_unique<Leaf>();
+        std::unique_ptr<Leaf> *first_leaf = &current_leaf;
+        std::unique_ptr<Leaf> *last_leaf;
+        It it;
+        size_type i;
         for (it = begin, i = 0; it != end && i < keys_per_leaf; ++it) {
-            tree.leaf_head_->insert(std::move(it->first), std::move(it->second));
+            if(current_leaf->is_full()) {
+
+                auto new_leaf = std::make_unique<Leaf>();
+                current_leaf->next(new_leaf);
+                leaves.push(current_leaf);
+                current_leaf = new_leaf;
+            }
+            // tree.leaf_head_->insert(std::move(it->first), std::move(it->second));
+            // current_leaf->insert(std::move(it->first), std::move(it->second));
+            current_leaf->insert(it->first, it->second);
             i++;
         }
-        
+        leaves.push(current_leaf);
+        last_leaf = &current_leaf;
+        if(num_leaves == 1) {
+            // TODO fix setting root being Node and not leaf
+            // tree.root_ = std::move(current_leaf);
+            tree.leaf_head_ = std::move(current_leaf);
+            return tree;
+        }
 
         return tree;
     }
