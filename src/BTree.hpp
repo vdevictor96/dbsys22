@@ -476,15 +476,16 @@ struct BTree
     /** Returns a `const_iterator` to the first element with the given \p key, if any, and `end()` otherwise. */
     const_iterator find(const key_type &key) const {
         /* TODO 1.4.5 */
-
+        if (size_ < 1) return cend();
         Node* current_node = root_;
         while (!(current_node->leaf)) {
             INode* inode = static_cast<INode*>(current_node);
             size_type index = 0;
             bool found = false;
-
-            for (index = 0; index < inode->size() - 1; index++) {
-                if (key < inode->keys()[index]) {
+            auto inode_keys = inode->keys();
+            size_type inode_size = inode->size();
+            for (index = 0; index < inode_size - 1; index++) {
+                if (key < inode_keys[index]) {
                     found = true;
                     break;
                 }
@@ -493,18 +494,11 @@ struct BTree
         }
 
         Leaf* leaf = static_cast<Leaf*>(current_node);
-        for (size_type i = 0; i < leaf->size(); i++) {
-            if (leaf->keys()[i] == key) {
+        auto leaf_keys = leaf->keys();
+        size_type leaf_size = leaf->size();
+        for (size_type i = 0; i < leaf_size; i++) {
+            if (leaf_keys[i] == key) {
                 return const_iterator(leaf, i);
-            }
-        }
-        // try in next leaf
-        if (leaf->has_next()) {
-            Leaf *next_leaf = &leaf->next();
-            for (size_type i = 0; i < next_leaf->size(); i++) {
-                if (next_leaf->keys()[i] == key) {
-                    return const_iterator(next_leaf, i);
-                }
             }
         }
         return cend();
@@ -512,15 +506,16 @@ struct BTree
     /** Returns an `iterator` to the first element with the given \p key, if any, and `end()` otherwise. */
     iterator find(const key_type &key) {
         /* TODO 1.4.5 */
-
+        if (size_ < 1) return end();
         Node* current_node = root_;
         while (!(current_node->leaf)) {
             INode* inode = static_cast<INode*>(current_node);
             size_type index = 0;
             bool found = false;
-
-            for (index = 0; index < inode->size() - 1; index++) {
-                if (key < inode->keys()[index]) {
+            auto inode_keys = inode->keys();
+            size_type inode_size = inode->size();
+            for (index = 0; index < inode_size - 1; index++) {
+                if (key < inode_keys[index]) {
                     found = true;
                     break;
                 }
@@ -529,18 +524,11 @@ struct BTree
         }
 
         Leaf* leaf = static_cast<Leaf*>(current_node);
-        for (size_type i = 0; i < leaf->size(); i++) {
-            if (leaf->keys()[i] == key) {
+        auto leaf_keys = leaf->keys();
+        size_type leaf_size = leaf->size();
+        for (size_type i = 0; i < leaf_size; i++) {
+            if (leaf_keys[i] == key) {
                 return iterator(leaf, i);
-            }
-        }
-        // try in next leaf
-        if (leaf->has_next()) {
-            Leaf *next_leaf = &leaf->next();
-            for (size_type i = 0; i < next_leaf->size(); i++) {
-                if (next_leaf->keys()[i] == key) {
-                    return iterator(next_leaf, i);
-                }
             }
         }
         return end();
