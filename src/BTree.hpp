@@ -549,15 +549,7 @@ struct BTree
                     break;
                 }
             }
-            if (!inode->is_full() && !found) {
-                index = inode->size() - 1;
-            }
-            if (index < inode->size()) {
-                current_node = inode->pointer(index);
-            }
-            else {
-                 return end();
-            } 
+            current_node = inode->pointer(found ? index : inode->size() - 1);
         }
 
         Leaf* leaf = static_cast<Leaf*>(current_node);
@@ -587,19 +579,19 @@ struct BTree
             return const_range(iterator(nullptr, nullptr), iterator(nullptr, nullptr));
         }
 
-        the_iterator start = find_lower_key(lo, root_);
-        if ((start == end()) || ((*start).first() >= hi)) {
+        the_iterator begin_it = find_lower_key(lo, root_);
+        if ((begin_it == end()) || ((*begin_it).first() >= hi)) {
             return const_range(iterator(nullptr, nullptr), iterator(nullptr, nullptr));
         }
 
-        the_iterator end = start;
-        while (!(end == end())) {
-            if (((*end).first()) >= hi) {
+        the_iterator end_it = begin_it;
+        while (!(end_it == end())) {
+            if (((*end_it).first()) >= hi) {
                 break;
             }
-            end++;
+            end_it++;
         }
-        return const_range(start, end);
+        return const_range(begin_it, end_it);
     }
     /** Returns a `range` of all elements with key in the interval `[lo, hi)`, i.e. `lo` including and `hi` excluding.
      * */
@@ -609,19 +601,19 @@ struct BTree
             return range(end(), end());
         }
 
-        iterator start = find_lower_key(lo, root_);
-        if ((start == end()) || ((*start).first() >= hi)) {
+        iterator begin_it = find_lower_key(lo, root_);
+        if ((begin_it == end()) || ((*begin_it).first() >= hi)) {
             return range(end(), end());
         }
 
-        iterator end = start;
-        while (!(end == end())) {
-            if (((*end).first()) >= hi) {
+        iterator end_it = begin_it;
+        while (!(end_it == end())) {
+            if (((*end_it).first()) >= hi) {
                 break;
             }
-            end++;
+            end_it++;
         }
-        return range(start, end);
+        return range(begin_it, end_it);
     }
 
     /** Returns a `const_range` of all elements with key equals to \p key. */
@@ -642,19 +634,13 @@ struct BTree
             INode* inode = static_cast<INode*>(current_node);
             size_type index = 0;
             bool found = false;
-
             for (index = 0; index < inode->size() - 1; index++) {
                 if (key <= inode->keys()[index]) {
                     found = true;
                     break;
                 }
             }
-            if (!inode->is_full() && !found) {
-                index = inode->size() - 1;
-            }
-            if (index < inode->size()) {
-                current_node = inode->pointer(index);
-            }
+            current_node = inode->pointer(found ? index : inode->size() - 1);
         }
         Leaf* leaf = static_cast<Leaf*>(current_node);
         for (size_type i = 0; i < leaf->size(); i++) {
