@@ -379,57 +379,50 @@ struct BTree
     }
     {
         /* TODO 1.4.4 */
-        size_type height = 0;
         size_type size = std::distance(begin, end);
         Leaf *first_leaf, *last_leaf;
         size_type const keys_per_leaf = NUM_KEYS_PER_LEAF;
         size_type num_leaves = size / keys_per_leaf + (size % keys_per_leaf != 0);
-         
-        if(size == 0) {
-            Leaf *empty_leaf = new Leaf();
-            return BTree(empty_leaf, size, height, empty_leaf, empty_leaf);
-        }
-
-        std::vector<Node*> inodes, leaves;
+        size_type height = num_leaves > 1 ? 1 : 0;
+        std::vector<Node*> inodes, leaves, children;
 
         Leaf * current_leaf = new Leaf();
         first_leaf = current_leaf;
         for (It it = begin; it != end; ++it) {
+            // if current_leaf is full, create the next leaf and point it
             if(current_leaf->is_full()) {
                 Leaf *new_leaf = new Leaf();
                 current_leaf->next(new_leaf);
                 leaves.push_back(current_leaf);
                 current_leaf = new_leaf;
             }
+            // add ref_pairs to current leave
             current_leaf->add_key_value(make_ref_pair(it->first, const_cast<mapped_type&>(it->second)));
         }
         leaves.push_back(current_leaf);
         last_leaf = current_leaf;
 
-        if (num_leaves == 1) {
-            return BTree(first_leaf, size, height, first_leaf, first_leaf);
-        } else {
-            while(leaves.size() > 1) {
-                INode *current_inode = new INode();
-                height++;
-                for (size_type i = 0; i < leaves.size(); i++) {
-                    if (current_inode->is_full()) {
-                        INode *new_inode = new INode();
-                        inodes.push_back(current_inode);
-                        current_inode = new_inode;
-                    }
-                    Node *node = leaves[i];
-                    current_inode->add_pointer(node);
+        children = leaves;
+        while(children.size() > 1) {
+            INode *current_inode = new INode();
+            height++;
+            for (size_type i = 0; i < children.size(); i++) {
+                // if inode is full create new and add them to inodes temporal (next children)
+                if (current_inode->is_full()) {
+                    INode *new_inode = new INode();
+                    inodes.push_back(current_inode);
+                    current_inode = new_inode;
                 }
-                inodes.push_back(current_inode);
-                leaves = inodes;
-                inodes.clear();
+                // add children to inode
+                Node *node = children[i];
+                current_inode->add_pointer(node);
             }
-        }
-        INode *root = static_cast<INode*>(leaves.front());
-        height++;
-
-        return BTree(root, size, height, first_leaf, last_leaf);
+            inodes.push_back(current_inode);
+            // update children to the previous layer inodes
+            children = inodes;
+            inodes.clear();
+            }        
+        return BTree(children.front(), size, height, first_leaf, last_leaf);
     }
 
     private:
@@ -467,19 +460,13 @@ struct BTree
     iterator begin() { /* TODO 1.4.3 */ return iterator(first_leaf_, first_key_idx_); }
     /** Returns the past-the-end `iterator`. */
     iterator end() { /* TODO 1.4.3 */ 
-        if (size_ == 0) {
-            return iterator(first_leaf_, first_key_idx_);
-        } 
-        return ++iterator(last_leaf_, last_key_idx_);
+        return size_ ? ++iterator(last_leaf_, last_key_idx_) : iterator(last_leaf_, last_key_idx_);
     } 
     /** Returns an `const_iterator` to the smallest key-value pair of the tree, if any, and `end()` otherwise. */
     const_iterator begin() const { /* TODO 1.4.3 */ return const_iterator(first_leaf_, first_key_idx_);}
     /** Returns the past-the-end `iterator`. */
     const_iterator end() const { /* TODO 1.4.3 */
-        if (size_ == 0) {
-            return const_iterator(first_leaf_, first_key_idx_);
-        } 
-        return ++const_iterator(last_leaf_, last_key_idx_);
+        return size_ ? ++iterator(last_leaf_, last_key_idx_) : iterator(last_leaf_, last_key_idx_);
     }
     /** Returns an `const_iterator` to the smallest key-value pair of the tree, if any, and `end()` otherwise. */
     const_iterator cbegin() const { return begin(); }
@@ -489,7 +476,6 @@ struct BTree
     /** Returns a `const_iterator` to the first element with the given \p key, if any, and `end()` otherwise. */
     const_iterator find(const key_type &key) const {
         /* TODO 1.4.5 */
-        if (size_ < 1) return cend();
 
         Node* current_node = root_;
         while (!(current_node->leaf)) {
@@ -503,15 +489,7 @@ struct BTree
                     break;
                 }
             }
-            if (!inode->is_full() && !found) {
-                index = inode->size() - 1;
-            }
-            if (index < inode->size()) {
-                current_node = inode->pointer(index);
-            }
-            else {
-                 return cend();
-            } 
+            current_node = inode->pointer(found ? index : inode->size() - 1);
         }
 
         Leaf* leaf = static_cast<Leaf*>(current_node);
@@ -534,8 +512,6 @@ struct BTree
     /** Returns an `iterator` to the first element with the given \p key, if any, and `end()` otherwise. */
     iterator find(const key_type &key) {
         /* TODO 1.4.5 */
-
-        if (size_ < 1) return end();
 
         Node* current_node = root_;
         while (!(current_node->leaf)) {
