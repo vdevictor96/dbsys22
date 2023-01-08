@@ -315,7 +315,6 @@ struct BTree
             if (leaf_key_idx_ == leaf_->size()) {
                 if (leaf_->has_next()) {
                     leaf_key_idx_ = 0;
-                    // TODO rewrite review & as it is different from codebase
                     leaf_ = &leaf_->next();
                 }
             }
@@ -593,14 +592,14 @@ struct BTree
             return const_range(iterator(nullptr, nullptr), iterator(nullptr, nullptr));
         }
 
-        the_iterator fin = start;
-        while (!(fin == end())) {
-            if (((*fin).first()) >= hi) {
+        the_iterator end = start;
+        while (!(end == end())) {
+            if (((*end).first()) >= hi) {
                 break;
             }
-            fin++;
+            end++;
         }
-        return const_range(start, fin);
+        return const_range(start, end);
     }
     /** Returns a `range` of all elements with key in the interval `[lo, hi)`, i.e. `lo` including and `hi` excluding.
      * */
@@ -615,14 +614,14 @@ struct BTree
             return range(end(), end());
         }
 
-        iterator fin = start;
-        while (!(fin == end())) {
-            if (((*fin).first()) >= hi) {
+        iterator end = start;
+        while (!(end == end())) {
+            if (((*end).first()) >= hi) {
                 break;
             }
-            fin++;
+            end++;
         }
-        return range(start, fin);
+        return range(start, end);
     }
 
     /** Returns a `const_range` of all elements with key equals to \p key. */
