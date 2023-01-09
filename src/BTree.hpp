@@ -80,7 +80,7 @@ struct BTree
     /** Computes the number of key-value pairs per `Leaf`, considering the specified `NodeSizeInBytes`. */
     static constexpr size_type compute_num_keys_per_leaf()
     {
-        /* TODO 1.2.1 */       
+         /* TODO 1.2.1 */       
         // Size taken by pointer to the previous and next leaf
         size_type metadata_size = sizeof(Leaf*);
         // Size taken by flag indicating is leaf node or not
@@ -477,64 +477,27 @@ struct BTree
     const_iterator find(const key_type &key) const {
         /* TODO 1.4.5 */
         if (size_ < 1) return cend();
-        Node* current_node = root_;
-        while (!(current_node->leaf)) {
-            INode* inode = static_cast<INode*>(current_node);
-            size_type index = 0;
-            bool found = false;
-            auto inode_keys = inode->keys();
-            size_type inode_size = inode->size();
-            for (index = 0; index < inode_size - 1; index++) {
-                if (key < inode_keys[index]) {
-                    found = true;
-                    break;
-                }
-            }
-            current_node = inode->pointer(found ? index : inode->size() - 1);
+        std::pair<Leaf*, size_type> result = find_(key, root_);
+        if (result.first == nullptr) {
+            return cend();
+        } else {
+            return const_iterator(result.first , result.second);
         }
-
-        Leaf* leaf = static_cast<Leaf*>(current_node);
-        auto leaf_keys = leaf->keys();
-        size_type leaf_size = leaf->size();
-        for (size_type i = 0; i < leaf_size; i++) {
-            if (leaf_keys[i] == key) {
-                return const_iterator(leaf, i);
-            }
-        }
-        return cend();
     }
     /** Returns an `iterator` to the first element with the given \p key, if any, and `end()` otherwise. */
     iterator find(const key_type &key) {
         /* TODO 1.4.5 */
         if (size_ < 1) return end();
-        Node* current_node = root_;
-        while (!(current_node->leaf)) {
-            INode* inode = static_cast<INode*>(current_node);
-            size_type index = 0;
-            bool found = false;
-            auto inode_keys = inode->keys();
-            size_type inode_size = inode->size();
-            for (index = 0; index < inode_size - 1; index++) {
-                if (key < inode_keys[index]) {
-                    found = true;
-                    break;
-                }
-            }
-            current_node = inode->pointer(found ? index : inode->size() - 1);
+        std::pair<Leaf*, size_type> result = find_(key, root_);
+        if (result.first == nullptr) {
+            return end();
+        } else {
+            return iterator(result.first , result.second);
         }
-
-        Leaf* leaf = static_cast<Leaf*>(current_node);
-        auto leaf_keys = leaf->keys();
-        size_type leaf_size = leaf->size();
-        for (size_type i = 0; i < leaf_size; i++) {
-            if (leaf_keys[i] == key) {
-                return iterator(leaf, i);
-            }
-        }
-        return end();
     }
 
     
+
     /** Returns a `const_range` of all elements with key in the interval `[lo, hi)`, i.e. `lo` including and `hi`
      * excluding. */
     const_range find_range(const key_type &lo, const key_type &hi) const {
@@ -592,6 +555,34 @@ struct BTree
     }
 
     private:
+    std::pair<Leaf*, size_type> find_ (const key_type &key, Node* root) const {
+        Node* current_node = root;
+        while (!(current_node->leaf)) {
+            INode* inode = static_cast<INode*>(current_node);
+            size_type index = 0;
+            bool found = false;
+            auto inode_keys = inode->keys();
+            size_type inode_size = inode->size();
+            for (index = 0; index < inode_size - 1; index++) {
+                if (key < inode_keys[index]) {
+                    found = true;
+                    break;
+                }
+            }
+            current_node = inode->pointer(found ? index : inode->size() - 1);
+        }
+
+        Leaf* leaf = static_cast<Leaf*>(current_node);
+        auto leaf_keys = leaf->keys();
+        size_type leaf_size = leaf->size();
+        for (size_type i = 0; i < leaf_size; i++) {
+            if (leaf_keys[i] == key) {
+                return std::make_pair(leaf, i);
+            }
+        }
+        return std::make_pair(nullptr, 0);
+    }
+
     iterator find_lower_key(const key_type& key, Node* root) {
         Node* current_node = root;
         while (!(current_node->leaf)) {
