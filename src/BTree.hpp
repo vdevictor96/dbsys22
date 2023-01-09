@@ -380,12 +380,14 @@ struct BTree
     {
         /* TODO 1.4.4 */
         size_type size = std::distance(begin, end);
+        if (size == 0) return BTree();
+        
         Leaf *first_leaf, *last_leaf;
         size_type const keys_per_leaf = NUM_KEYS_PER_LEAF;
         size_type num_leaves = size / keys_per_leaf + (size % keys_per_leaf != 0);
         size_type height = num_leaves > 1 ? 1 : 0;
-        std::vector<Node*> inodes, leaves, children;
 
+        std::vector<Node*> inodes, leaves, children;
         Leaf * current_leaf = new Leaf();
         first_leaf = current_leaf;
         for (It it = begin; it != end; ++it) {
@@ -426,6 +428,15 @@ struct BTree
     }
 
     private:
+    /* Empty C'tor */
+    BTree() {
+        Leaf* new_leaf = new Leaf();
+        root_ = first_leaf_ = last_leaf_ = new_leaf;
+        size_ = height_ = 0;
+        first_key_idx_ = last_key_idx_ = 0;
+
+    }
+    /* C'tor */
     BTree(Node* root, size_type size, size_type height, Leaf *first_leaf, Leaf *last_leaf) {
         root_ = root;
         size_ = size;
