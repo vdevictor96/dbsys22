@@ -192,7 +192,7 @@ CREATE TABLE T (\n\
             expected_cost = 11;
         }
 
-        SECTION("T0 ⋈  (T1 ⋈  T2)")
+        SECTION("(T0 ⋈  T1) ⋈  T2")
         {
             write_cardinalities(cardinalities, "test", {
                 { { "T0" }, 5 },
