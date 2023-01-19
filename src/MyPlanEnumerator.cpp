@@ -3,6 +3,35 @@
 
 using namespace m;
 
+static std::vector<QueryGraph::Subproblem> connected_subsets(std::vector<size_t> sources, size_t planSize, const AdjacencyMatrix &M) {
+    // if planSize set to 0, then return all the connected subsets
+    if (planSize == 0) {
+        planSize = sources.size();
+    }
+    std::vector<QueryGraph::Subproblem> subsets;
+    for (size_t bit = 1; bit < pow(2, sources.size()); bit++) {
+        QueryGraph::Subproblem subset(bit);
+        if (subset.size() >= planSize && M.is_connected(subset)) {
+            subsets.push_back(subset);
+        }
+    }
+    return subsets;
+}
+
+
+static std::vector<QueryGraph::Subproblem> connected_subsetsO(QueryGraph::Subproblem &subset, const AdjacencyMatrix &M) {
+    size_t max_value = uint64_t(subset);
+    std::vector<QueryGraph::Subproblem> subsetsO;
+    // from 1 to max_value, not included
+    for (size_t bit = 1; bit < max_value; bit++) {
+        // the bits that are 0 in the subset cannot be 1 in the subsetsO
+        QueryGraph::Subproblem subsetO(bit);
+        if (subsetO.is_subset(subset) && M.is_connected(subsetO)) {
+            subsetsO.push_back(subsetO);
+        }
+    }
+    return subsetsO;
+}
 
 template<typename PlanTable>
 void MyPlanEnumerator::operator()(enumerate_tag, PlanTable &PT, const QueryGraph &G, const CostFunction &CF) const
@@ -13,7 +42,31 @@ void MyPlanEnumerator::operator()(enumerate_tag, PlanTable &PT, const QueryGraph
                         // doesn't matter.
 
     // TODO 3: Implement algorithm for plan enumeration (join ordering).
+    std::vector<size_t> sourceIds;
+    for (const auto &ds : G.sources()) {
+        sourceIds.push_back(ds->id());
+    }
+   
+    for(size_t planSize = 2; planSize <= sourceIds.size(); planSize++) {
+        std::vector<QueryGraph::Subproblem> subsets = connected_subsets(sourceIds, planSize, M);
+        for(auto subset: subsets) {
+            std::vector<QueryGraph::Subproblem> subsetsO = connected_subsetsO(subset, M);
+            std::vector<QueryGraph::Subproblem> computed;
+            for(auto left : subsetsO) {
+                // check for symmetric cases and do not calculate them
+                if (std::find(computed.begin(), computed.end(), left) == computed.end()) {
+                    QueryGraph::Subproblem right(subset & ~left);
+                    if(M.is_connected(right)) {
+                        computed.push_back(right);
+                        PT.update(G, CE, CF, left, right, condition);
+                    }
+                }
+            }
+        }
+    }
 }
 
 template void MyPlanEnumerator::operator()<PlanTableSmallOrDense&>(enumerate_tag, PlanTableSmallOrDense&, const QueryGraph&, const CostFunction&) const;
 template void MyPlanEnumerator::operator()<PlanTableLargeAndSparse&>(enumerate_tag, PlanTableLargeAndSparse&, const QueryGraph&, const CostFunction&) const;
+
+
