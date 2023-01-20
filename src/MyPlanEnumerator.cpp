@@ -3,13 +3,11 @@
 
 using namespace m;
 
-static std::vector<QueryGraph::Subproblem> connected_subsets(std::vector<size_t> sources, size_t planSize, const AdjacencyMatrix &M) {
+static std::vector<QueryGraph::Subproblem> connected_subsets(size_t planSize, size_t sourcesSize, const AdjacencyMatrix &M) {
     // if planSize set to 0, then return all the connected subsets
-    if (planSize == 0) {
-        planSize = sources.size();
-    }
+    planSize = planSize == 0 ? sourcesSize : planSize;
     std::vector<QueryGraph::Subproblem> subsets;
-    for (size_t bit = 1; bit < pow(2, sources.size()); bit++) {
+    for (size_t bit = 1; bit < pow(2, sourcesSize); bit++) {
         QueryGraph::Subproblem subset(bit);
         if (subset.size() >= planSize && M.is_connected(subset)) {
             subsets.push_back(subset);
@@ -42,13 +40,9 @@ void MyPlanEnumerator::operator()(enumerate_tag, PlanTable &PT, const QueryGraph
                         // doesn't matter.
 
     // TODO 3: Implement algorithm for plan enumeration (join ordering).
-    std::vector<size_t> sourceIds;
-    for (const auto &ds : G.sources()) {
-        sourceIds.push_back(ds->id());
-    }
-   
-    for(size_t planSize = 2; planSize <= sourceIds.size(); planSize++) {
-        std::vector<QueryGraph::Subproblem> subsets = connected_subsets(sourceIds, planSize, M);
+    size_t n = G.num_sources();
+    for(size_t planSize = 2; planSize <= n; planSize++) {
+        std::vector<QueryGraph::Subproblem> subsets = connected_subsets(planSize, n, M);
         for(auto subset: subsets) {
             std::vector<QueryGraph::Subproblem> subsetsO = connected_subsetsO(subset, M);
             std::vector<QueryGraph::Subproblem> computed;
