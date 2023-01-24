@@ -2,6 +2,7 @@
 
 #include "milestone3_utils.hpp"
 #include "MyPlanEnumerator.hpp"
+#include "nullstream.hpp"
 #include <initializer_list>
 #include <memory>
 #include <sstream>
@@ -24,20 +25,6 @@ struct PT_entry
     std::size_t size;
     PlanTable::Subproblem S1;
     PlanTable::Subproblem S2;
-};
-
-class NullBuffer : public std::streambuf
-{
-    public:
-    int overflow(int c) { return c; }
-};
-
-class NullStream : public std::ostream
-{
-    public:
-    NullStream() : std::ostream(&m_sb) {}
-    private:
-    NullBuffer m_sb;
 };
 
 struct CardinalityWriter
